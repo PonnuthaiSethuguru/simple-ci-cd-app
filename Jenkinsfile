@@ -50,17 +50,17 @@ pipeline {
             }
         }
 
-        stage('Quality Gate') {
-            steps {
-                echo 'Waiting for SonarQube to call back...'
-                timeout(time: 5, unit: 'MINUTES') {
-                    // This waits for the webhook you just fixed
-                    waitForQualityGate abortPipeline: true
-                }
-            }
+stage('Quality Gate') {
+    steps {
+        echo 'Waiting for SonarQube Quality Gate result...'
+        // A short sleep ensures the background task you showed is 100% done
+        sleep(5) 
+        timeout(time: 5, unit: 'MINUTES') {
+            // This will now poll SonarQube if the webhook hasn't arrived
+            waitForQualityGate abortPipeline: true
         }
     }
-
+}
     post {
         always {
             echo 'Pipeline execution finished.'
