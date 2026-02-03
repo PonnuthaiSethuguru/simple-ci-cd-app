@@ -1,24 +1,20 @@
 pipeline {
     agent any
 
-    environment {
-        // Jenkins Credentials IDs
-        SONAR_TOKEN = credentials('SonarQubeToken') 
-        DOCKER_REGISTRY = "your-docker-registry" // e.g., docker.io/username
-        IMAGE_NAME = "simple-ci-cd-app"
-        IMAGE_TAG = "${env.BUILD_NUMBER}"
+    tools {
+        jdk 'JDK21'                     // Name from Global Tool Configuration
+        sonarRunner 'SonarQubeScanner'  // Name from Global Tool Configuration
+        gradle 'Gradle'                 // Optional: if you installed Gradle via Jenkins
+    }
 
-        // Avoid pip/python errors
+    environment {
+        SONAR_TOKEN = credentials('SonarQubeToken') // Jenkins credential ID
         PATH = "/usr/local/bin:/usr/bin:/bin:$PATH"
     }
 
-    tools {
-        jdk 'JDK 21'
-        sonarQube 'SonarQubeScanner'
-    }
-
     stages {
-        stage('Checkout SCM') {
+
+        stage('Checkout') {
             steps {
                 checkout scm
             }
@@ -26,23 +22,21 @@ pipeline {
 
         stage('Build & Test') {
             steps {
-                echo "Building Gradle project..."
-                sh '''
-                    # Use Gradle wrapper (no need for system Gradle)
-                    chmod +x ./gradlew
-                    ./gradlew clean build --no-daemon
-                '''
+                echo "Building project with Gradle..."
+                sh './gradlew clean build --no-daemon'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                echo "Running SonarQube Analysis..."
+                echo "Running SonarQube scan..."
                 sh '''
-                    ./gradlew sonarqube \
-                        -Dsonar.host.url=http://localhost:9000 \
-                        -Dsonar.login=${SONAR_TOKEN} \
-                        --no-daemon
+                ./gradlew sonarqube \
+                    -Dsonar.projectKey=simple-ci-cd-app \
+                    -Dsonar.organization=your-org-key \
+                    -Dsonar.host.url=http://localhost:9000 \
+                    -Dsonar.login=${SONAR_TOKEN} \
+                    --no-daemon
                 '''
             }
         }
@@ -50,33 +44,38 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 echo "Checking SonarQube Quality Gate..."
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
+                // Optional: requires SonarQube plugin for Jenkins
+                waitForQualityGate abortPipeline: true
             }
         }
 
         stage('Docker Build & Push') {
             steps {
-                echo "Building Docker image..."
-                sh '''
-                    docker build -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} .
-                    docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-                '''
+                script {
+                    def imageName = "your-dockerhub-username/simple-ci-cd-app"
+                    sh "docker build -t ${imageName}:latest ."
+                    withDockerRegistry([credentialsId: 'DockerHubCredentials', url: '']) {
+                        sh "docker push ${imageName}:latest"
+                    }
+                }
             }
         }
 
         stage('Deploy') {
             steps {
-                echo "Deploying application..."
-                sh "echo 'Deploy stage: implement your deployment here.'"
+                echo "Deploy stage: Implement deployment steps here"
+                // Example: kubectl, ssh, helm, etc.
             }
         }
     }
 
     post {
-        success { echo "Pipeline completed successfully! ✅" }
-        failure { echo "Pipeline failed! ❌" }
+        success {
+            echo "Pipeline completed successfully!"
+        }
+        failure {
+            echo "Pipeline failed. Check the logs!"
+        }
     }
 }
 
