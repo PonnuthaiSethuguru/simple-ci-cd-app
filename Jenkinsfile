@@ -47,3 +47,28 @@ pipeline {
         }
     } // <--- This closes 'stages'
 } // <--- This closes 'pipeline'
+
+
+// NEW STAGE - Added after the "Old" stages are finished
+        stage('Docker Build & Push') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', 
+                                     passwordVariable: 'DOCKER_PASS', 
+                                     usernameVariable: 'DOCKER_USER')]) {
+                        
+                        // Build using the Jenkins Build Number as the tag
+                        sh "docker build -t ${DOCKER_REPO}:${env.BUILD_NUMBER} ."
+                        
+                        // Login and Push
+                        sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
+                        sh "docker push ${DOCKER_REPO}:${env.BUILD_NUMBER}"
+                        
+                        // Clean up local image to save space
+                        sh "docker rmi ${DOCKER_REPO}:${env.BUILD_NUMBER}"
+                    }
+                }
+            }
+        }
+    }
+}
