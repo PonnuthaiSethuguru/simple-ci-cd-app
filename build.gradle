@@ -20,6 +20,11 @@ java {
     }
 }
 
+plugins {
+    id "org.sonarqube" version "5.1.0.4882" // Add this line
+    // ... your other plugins like id 'java'
+}
+
 application {
     mainClass = 'com.example.App' // Correct way in Gradle 7+
 }
