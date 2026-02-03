@@ -49,9 +49,13 @@ pipeline {
             }
         }
 
-        stage('Quality Gate') {
+stage('Quality Gate') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
+                script {
+                    // Give SonarQube 20 seconds to finish processing before we even ask
+                    sleep(20) 
+                }
+                timeout(time: 10, unit: 'MINUTES') { // Increased to 10 mins
                     waitForQualityGate abortPipeline: true
                 }
             }
