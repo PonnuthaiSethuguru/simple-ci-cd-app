@@ -1,11 +1,21 @@
 pipeline {
     agent any
-    
+
     environment {
-        // Update these to match your actual environment
-        DOCKER_IMAGE = "your-docker-username/simple-ci-cd-app"
-        DOCKER_HUB_CREDS = credentials('dockerhub-creds') 
-        SONAR_SCANNER_HOME = tool 'SonarScanner' 
+        // This must match the name you gave your SonarQube server in Manage Jenkins > System
+        SONAR_SERVER_NAME = 'SonarQubeScanner'
+        // This must match the Credentials ID you created for DockerHub
+        DOCKER_HUB_CREDS_ID = 'dockerhub-credentials'
+        // Update with your actual DockerHub username
+        DOCKER_REPO = 'ponnuthaisethuguru/simple-ci-cd-app'
+    }
+
+    tools {
+        jdk 'JDK21'
+        gradle 'Gradle'
+        // This must match the name you gave in Manage Jenkins > Tools
+        // From your logs, it looks like you named it 'SonarScanner'
+        sonarScanner 'SonarScanner'
     }
 
     stages {
@@ -17,26 +27,23 @@ pipeline {
 
         stage('Build & Test') {
             steps {
-                // Ensure npm is installed on your Jenkins agent
-                sh 'npm install'
-                sh 'npm test' 
+                // No need for 'sh' pathing; 'tools' block handles it
+                sh 'gradle clean build --no-daemon'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                script {
-                    withSonarQubeEnv('SonarQube') {
-                        sh "${SONAR_SCANNER_HOME}/bin/sonar-scanner \
-                        -Dsonar.projectKey=simple-ci-cd-app \
-                        -Dsonar.sources=. "
-                    }
+                withSonarQubeEnv("${env.SONAR_SERVER_NAME}") {
+                    // This uses the scanner tool defined above
+                    sh "gradle sonar -Dsonar.projectKey=simple-ci-cd-app --no-daemon"
                 }
             }
         }
 
         stage('Quality Gate') {
             steps {
+                // Wait for SonarQube to process the results
                 timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
@@ -45,19 +52,24 @@ pipeline {
 
         stage('Docker Build & Push') {
             steps {
-                sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_ID} ."
-                sh "echo $DOCKER_HUB_CREDS_PSW | docker login -u $DOCKER_HUB_CREDS_USR --password-stdin"
-                sh "docker push ${DOCKER_IMAGE}:${env.BUILD_ID}"
+                script {
+                    withCredentials([usernamePassword(credentialsId: "${env.DOCKER_HUB_CREDS_ID}", 
+                                     passwordVariable: 'DOCKER_PASS', 
+                                     usernameVariable: 'DOCKER_USER')]) {
+                        
+                        // 1. Build the image with the Jenkins Build Number
+                        sh "docker build -t ${env.DOCKER_REPO}:${env.BUILD_NUMBER} ."
+                        
+                        // 2. Login and Push
+                        sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
+                        sh "docker push ${env.DOCKER_REPO}:${env.BUILD_NUMBER}"
+                        
+                        // 3. Tag as latest and push
+                        sh "docker tag ${env.DOCKER_REPO}:${env.BUILD_NUMBER} ${env.DOCKER_REPO}:latest"
+                        sh "docker push ${env.DOCKER_REPO}:latest"
+                    }
+                }
             }
         }
-
-        stage('Deploy') {
-            steps {
-                // Deploying as a local container
-                sh "docker stop simple-app || true"
-                sh "docker rm simple-app || true"
-                sh "docker run -d --name simple-app -p 8080:8080 ${DOCKER_IMAGE}:${env.BUILD_ID}"
-            }
-        }
-    } // End Stages
-} // End Pipeline
+    }
+}
