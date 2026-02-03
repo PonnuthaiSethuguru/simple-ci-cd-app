@@ -1,14 +1,8 @@
 pipeline {
     agent any
 
-    tools {
-        jdk 'JDK21'                     // Name from Global Tool Configuration
-        sonarRunner 'SonarQubeScanner'  // Name from Global Tool Configuration
-        gradle 'Gradle'                 // Optional: if you installed Gradle via Jenkins
-    }
-
     environment {
-        SONAR_TOKEN = credentials('SonarQubeToken') // Jenkins credential ID
+        SONAR_TOKEN = credentials('SonarQubeToken') // Jenkins secret text ID
         PATH = "/usr/local/bin:/usr/bin:/bin:$PATH"
     }
 
@@ -22,7 +16,7 @@ pipeline {
 
         stage('Build & Test') {
             steps {
-                echo "Building project with Gradle..."
+                echo "Building project with Gradle wrapper..."
                 sh './gradlew clean build --no-daemon'
             }
         }
@@ -64,7 +58,6 @@ pipeline {
         stage('Deploy') {
             steps {
                 echo "Deploy stage: Implement deployment steps here"
-                // Example: kubectl, ssh, helm, etc.
             }
         }
     }
