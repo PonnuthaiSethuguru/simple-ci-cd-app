@@ -2,14 +2,18 @@ pipeline {
     agent any
 
     environment {
-        SONAR_HOST_URL = 'http://localhost:9000'         // Replace with your SonarQube server URL
-        SONAR_TOKEN    = credentials('JenkinsSonarToken') // Jenkins credential ID for SonarQube token
+        // Fixes the "command not found" issue by restoring system paths
+        PATH = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
+        
+        // SonarQube Settings
+        SONAR_HOST_URL = 'http://localhost:9000'
+        SONAR_TOKEN    = credentials('JenkinsSonarToken')
     }
 
     tools {
-        jdk 'JDK21'                // Make sure this matches Jenkins Global Tool Configuration
-        gradle 'Gradle'            // Optional if Gradle is installed via Jenkins
-        // sonarScanner 'SonarQubeScanner' // Not needed if using Gradle Sonar plugin
+        // These MUST match the 'Name' fields in Manage Jenkins -> Tools
+        jdk 'JDK21'
+        gradle 'Gradle'
     }
 
     stages {
@@ -22,50 +26,43 @@ pipeline {
         stage('Build & Test') {
             steps {
                 echo 'Building project with Gradle...'
-                sh './gradlew clean build --no-daemon'
+                script {
+                    // Explicitly catching the tool path to ensure JAVA_HOME is set
+                    def jdkHome = tool 'JDK21'
+                    withEnv(["JAVA_HOME=${jdkHome}"]) {
+                        // Ensure gradlew is executable and run build
+                        sh 'chmod +x gradlew'
+                        sh './gradlew clean build --no-daemon'
+                    }
+                }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
                 echo 'Running SonarQube scan...'
-                sh """
-                    ./gradlew sonarqube \
-                        -Dsonar.projectKey=simple-ci-cd-app \
-                        -Dsonar.organization=your-org-key \
-                        -Dsonar.host.url=$SONAR_HOST_URL \
-                        -Dsonar.login=$SONAR_TOKEN \
-                        --no-daemon
-                """
+                script {
+                    def jdkHome = tool 'JDK21'
+                    withEnv(["JAVA_HOME=${jdkHome}"]) {
+                        sh """
+                            ./gradlew sonarqube \
+                                -Dsonar.projectKey=simple-ci-cd-app \
+                                -Dsonar.host.url=${SONAR_HOST_URL} \
+                                -Dsonar.login=${SONAR_TOKEN} \
+                                --no-daemon
+                        """
+                    }
+                }
             }
         }
 
         stage('Quality Gate') {
             steps {
                 echo 'Waiting for SonarQube Quality Gate result...'
+                // This requires SonarQube Server to be configured in Manage Jenkins -> System
                 timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
-            }
-        }
-
-        stage('Docker Build & Push') {
-            when {
-                expression { false } // Skip for now if Docker setup is not ready
-            }
-            steps {
-                echo 'Building and pushing Docker image...'
-                // Add Docker commands here
-            }
-        }
-
-        stage('Deploy') {
-            when {
-                expression { false } // Skip deploy for now
-            }
-            steps {
-                echo 'Deploying application...'
-                // Add deploy commands here
             }
         }
     }
@@ -78,8 +75,7 @@ pipeline {
             echo 'Build successful!'
         }
         failure {
-            echo 'Build failed. Check logs!'
+            echo 'Build failed. Check logs for PATH or JAVA_HOME errors.'
         }
     }
 }
-
