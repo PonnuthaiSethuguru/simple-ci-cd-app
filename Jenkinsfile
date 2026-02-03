@@ -1,30 +1,20 @@
 pipeline {
     agent any
-
+    environment {
+        PATH = "/opt/homebrew/bin:$PATH"
+    }
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Install Dependencies') {
             steps {
-                sh 'pip install -r requirements.txt'
+                sh 'python3 -m pip install --user -r requirements.txt'
             }
         }
-
         stage('Run Tests') {
             steps {
-                sh 'pytest'
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                sh 'docker build -t simple-ci-cd-app .'
+                sh 'python3 -m pytest'
             }
         }
     }
+}
 }
 
