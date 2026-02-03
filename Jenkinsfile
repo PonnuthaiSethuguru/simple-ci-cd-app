@@ -2,58 +2,83 @@ pipeline {
     agent any
 
     environment {
-        // Secret text in Jenkins credentials, ID: SONAR_TOKEN
-        SONAR_TOKEN = credentials('SONAR_TOKEN')
-        DOCKER_IMAGE = 'simple-ci-cd-app:latest'
+        SONAR_HOST_URL = 'http://localhost:9000'         // Replace with your SonarQube server URL
+        SONAR_TOKEN    = credentials('JenkinsSonarToken') // Jenkins credential ID for SonarQube token
+    }
+
+    tools {
+        jdk 'JDK21'                // Make sure this matches Jenkins Global Tool Configuration
+        gradle 'Gradle'            // Optional if Gradle is installed via Jenkins
+        // sonarScanner 'SonarQubeScanner' // Not needed if using Gradle Sonar plugin
     }
 
     stages {
         stage('Checkout') {
             steps {
-                echo "Checking out source code..."
                 checkout scm
             }
         }
 
         stage('Build & Test') {
             steps {
-                echo "Building project with Gradle wrapper..."
+                echo 'Building project with Gradle...'
                 sh './gradlew clean build --no-daemon'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                echo "Running SonarQube scan..."
-                sh "./gradlew sonarqube \
-                    -Dsonar.projectKey=simple-ci-cd-app \
-                    -Dsonar.host.url=http://localhost:9000 \
-                    -Dsonar.login=${SONAR_TOKEN} \
-                    --no-daemon"
+                echo 'Running SonarQube scan...'
+                sh """
+                    ./gradlew sonarqube \
+                        -Dsonar.projectKey=simple-ci-cd-app \
+                        -Dsonar.organization=your-org-key \
+                        -Dsonar.host.url=$SONAR_HOST_URL \
+                        -Dsonar.login=$SONAR_TOKEN \
+                        --no-daemon
+                """
             }
         }
 
-        stage('Docker Build & Run') {
+        stage('Quality Gate') {
             steps {
-                script {
-                    echo "Building Docker image..."
-                    docker.build("${DOCKER_IMAGE}")
-
-                    echo "Running Docker container..."
-                    sh "docker stop simple-ci-cd-app || true"
-                    sh "docker rm simple-ci-cd-app || true"
-                    sh "docker run -d --name simple-ci-cd-app -p 8080:8080 ${DOCKER_IMAGE}"
+                echo 'Waiting for SonarQube Quality Gate result...'
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
+            }
+        }
+
+        stage('Docker Build & Push') {
+            when {
+                expression { false } // Skip for now if Docker setup is not ready
+            }
+            steps {
+                echo 'Building and pushing Docker image...'
+                // Add Docker commands here
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                expression { false } // Skip deploy for now
+            }
+            steps {
+                echo 'Deploying application...'
+                // Add deploy commands here
             }
         }
     }
 
     post {
+        always {
+            echo 'Pipeline finished.'
+        }
         success {
-            echo 'Pipeline completed successfully!'
+            echo 'Build successful!'
         }
         failure {
-            echo 'Pipeline failed. Check logs!'
+            echo 'Build failed. Check logs!'
         }
     }
 }
