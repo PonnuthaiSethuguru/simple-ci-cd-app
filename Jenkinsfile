@@ -1,5 +1,10 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'python:3.10-slim'
+            args '-v /tmp:/tmp'
+        }
+    }
 
     environment {
         IMAGE_NAME = "dockerhubusername/simple-ci-cd-app"
@@ -16,14 +21,16 @@ pipeline {
             }
         }
 
-        stage('Build & Test') {
-            steps {
-                sh '''
-                pip install -r requirements.txt
-                pytest
-                '''
-            }
-        }
+stage('Build & Test') {
+    steps {
+        sh '''
+            python --version          # check Python version
+            pip install --upgrade pip # make sure pip is updated
+            pip install -r requirements.txt  # install dependencies
+            pytest                     # run your tests
+        '''
+    }
+}
 
         stage('SonarQube Analysis') {
             steps {
