@@ -1,45 +1,43 @@
 pipeline {
-    agent {
-        docker {
-            image 'python:3.10-slim'
-            args '-v /tmp:/tmp'
-        }
-    }
+    agent any
 
     environment {
-        IMAGE_NAME = "dockerhubusername/simple-ci-cd-app"
-        SONARQUBE_ENV = "SonarQube"
-        DOCKER_CREDENTIALS = "dockerhub-creds"
+        DOCKER = "/usr/local/bin/docker"
+        DOCKERHUB_CREDENTIALS = "dockerhub-creds"  // Replace with your Jenkins DockerHub credentials ID
+        IMAGE_NAME = "yourdockerhubusername/simple-ci-cd-app"
+        IMAGE_TAG = "latest"
+        SONARQUBE = "SonarQube"  // Replace with your Jenkins SonarQube server name
     }
 
     stages {
-
         stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/PonnuthaiSethuguru/simple-ci-cd-app'
+                checkout scm
             }
         }
 
-stage('Build & Test') {
-    steps {
-        sh '''
-            python --version          # check Python version
-            pip install --upgrade pip # make sure pip is updated
-            pip install -r requirements.txt  # install dependencies
-            pytest                     # run your tests
-        '''
-    }
-}
+        stage('Build & Test') {
+            steps {
+                // Run inside Python Docker container to ensure pip is available
+                sh '''
+                    docker run --rm -v $PWD:/app -w /app python:3.10-slim bash -c "
+                        pip install --upgrade pip && \
+                        pip install -r requirements.txt && \
+                        python -m unittest discover -s tests
+                    "
+                '''
+            }
+        }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv("${SONARQUBE_ENV}") {
+                withSonarQubeEnv("${SONARQUBE}") {
                     sh '''
-                    sonar-scanner \
-                    -Dsonar.projectKey=simple-ci-cd \
-                    -Dsonar.sources=. \
-                    -Dsonar.python.version=3
+                        docker run --rm -v $PWD:/app -w /app sonarsource/sonar-scanner-cli \
+                        -Dsonar.projectKey=simple-ci-cd-app \
+                        -Dsonar.sources=. \
+                        -Dsonar.host.url=$SONAR_HOST_URL \
+                        -Dsonar.login=$SONAR_AUTH_TOKEN
                     '''
                 }
             }
@@ -47,48 +45,29 @@ stage('Build & Test') {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 1, unit: 'MINUTES') {
+                timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
         }
 
-        stage('Docker Login & Build') {
+        stage('Docker Build & Push') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: "${DOCKER_CREDENTIALS}",
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh '''
-                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                    docker build --pull -t $IMAGE_NAME .
-                    '''
-                }
-            }
-        }
-
-        stage('Docker Push') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: "${DOCKER_CREDENTIALS}",
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh '''
-                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                    docker push $IMAGE_NAME
-                    '''
-                }
+                sh '''
+                    ${DOCKER} build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                    ${DOCKER} login -u $DOCKERHUB_USR -p $DOCKERHUB_PSW
+                    ${DOCKER} push ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
             }
         }
 
         stage('Deploy') {
             steps {
+                // Run container locally
                 sh '''
-                docker stop simple-app || true
-                docker rm simple-app || true
-                docker run -d --name simple-app -p 5000:5000 $IMAGE_NAME
+                    ${DOCKER} stop simple-ci-cd-app || true
+                    ${DOCKER} rm simple-ci-cd-app || true
+                    ${DOCKER} run -d --name simple-ci-cd-app -p 5000:5000 ${IMAGE_NAME}:${IMAGE_TAG}
                 '''
             }
         }
