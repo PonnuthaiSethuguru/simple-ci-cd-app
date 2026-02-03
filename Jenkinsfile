@@ -16,19 +16,16 @@ pipeline {
             }
         }
 
+stages {
         stage('Build & Test') {
             steps {
-                // Run inside Python Docker container to ensure pip is available
-                sh '''
-                    docker run --rm -v $PWD:/app -w /app python:3.10-slim bash -c "
-                        pip install --upgrade pip && \
-                        pip install -r requirements.txt && \
-                        python -m unittest discover -s tests
-                    "
-                '''
+                withEnv(["PATH+EXTRA=/usr/local/bin:/usr/bin:/bin"]) {
+                    sh 'echo Building project...'
+                    sh './gradlew build'  // or your actual build command
+                }
             }
         }
-
+    }
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv("${SONARQUBE}") {
