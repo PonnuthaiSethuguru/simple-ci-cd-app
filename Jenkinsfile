@@ -2,15 +2,22 @@ pipeline {
     agent any
 
     environment {
-        // Ensure /bin and /usr/bin are included so 'sh' works
+        // Jenkins Credentials IDs
+        SONAR_TOKEN = credentials('SonarQubeToken') 
+        DOCKER_REGISTRY = "your-docker-registry" // e.g., docker.io/username
+        IMAGE_NAME = "simple-ci-cd-app"
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+
+        // Avoid pip/python errors
         PATH = "/usr/local/bin:/usr/bin:/bin:$PATH"
-        // Example environment variables for Docker & SonarQube
-        DOCKER_REGISTRY = "your-docker-registry"
-        SONARQUBE_ENV = "SonarQube"
+    }
+
+    tools {
+        jdk 'JDK 21'
+        sonarQube 'SonarQubeScanner'
     }
 
     stages {
-
         stage('Checkout SCM') {
             steps {
                 checkout scm
@@ -19,30 +26,31 @@ pipeline {
 
         stage('Build & Test') {
             steps {
-                // Use PATH+EXTRA to safely append paths
-                withEnv(["PATH+EXTRA=/usr/local/bin:/usr/bin:/bin"]) {
-                    echo "Building project..."
-                    // Example build command
-                    sh './gradlew clean build'
-                }
+                echo "Building Gradle project..."
+                sh '''
+                    # Use Gradle wrapper (no need for system Gradle)
+                    chmod +x ./gradlew
+                    ./gradlew clean build --no-daemon
+                '''
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withEnv(["PATH+EXTRA=/usr/local/bin:/usr/bin:/bin"]) {
-                    script {
-                        // Wrap SonarQube scanner
-                        def scannerHome = tool name: 'SonarQubeScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                        sh "${scannerHome}/bin/sonar-scanner"
-                    }
-                }
+                echo "Running SonarQube Analysis..."
+                sh '''
+                    ./gradlew sonarqube \
+                        -Dsonar.host.url=http://localhost:9000 \
+                        -Dsonar.login=${SONAR_TOKEN} \
+                        --no-daemon
+                '''
             }
         }
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 1, unit: 'MINUTES') {
+                echo "Checking SonarQube Quality Gate..."
+                timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -50,37 +58,25 @@ pipeline {
 
         stage('Docker Build & Push') {
             steps {
-                withEnv(["PATH+EXTRA=/usr/local/bin:/usr/bin:/bin"]) {
-                    script {
-                        sh "docker build -t ${DOCKER_REGISTRY}/myapp:latest ."
-                        sh "docker push ${DOCKER_REGISTRY}/myapp:latest"
-                    }
-                }
+                echo "Building Docker image..."
+                sh '''
+                    docker build -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} .
+                    docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                '''
             }
         }
 
         stage('Deploy') {
             steps {
-                withEnv(["PATH+EXTRA=/usr/local/bin:/usr/bin:/bin"]) {
-                    sh "echo Deploying application..."
-                    // Example deploy command
-                    // sh "./deploy.sh"
-                }
+                echo "Deploying application..."
+                sh "echo 'Deploy stage: implement your deployment here.'"
             }
         }
-
     }
 
     post {
-        success {
-            echo 'Pipeline completed successfully!'
-        }
-        failure {
-            echo 'Pipeline failed.'
-        }
-        aborted {
-            echo 'Pipeline was aborted.'
-        }
+        success { echo "Pipeline completed successfully! ✅" }
+        failure { echo "Pipeline failed! ❌" }
     }
 }
 
