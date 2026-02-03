@@ -2,14 +2,15 @@ pipeline {
     agent any
 
     environment {
-        SONAR_TOKEN = credentials('SonarQubeToken') // Jenkins secret text ID
-        PATH = "/usr/local/bin:/usr/bin:/bin:$PATH"
+        // Secret text in Jenkins credentials, ID: SONAR_TOKEN
+        SONAR_TOKEN = credentials('SONAR_TOKEN')
+        DOCKER_IMAGE = 'simple-ci-cd-app:latest'
     }
 
     stages {
-
         stage('Checkout') {
             steps {
+                echo "Checking out source code..."
                 checkout scm
             }
         }
@@ -24,50 +25,35 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 echo "Running SonarQube scan..."
-                sh '''
-                ./gradlew sonarqube \
+                sh "./gradlew sonarqube \
                     -Dsonar.projectKey=simple-ci-cd-app \
-                    -Dsonar.organization=your-org-key \
                     -Dsonar.host.url=http://localhost:9000 \
                     -Dsonar.login=${SONAR_TOKEN} \
-                    --no-daemon
-                '''
+                    --no-daemon"
             }
         }
 
-        stage('Quality Gate') {
-            steps {
-                echo "Checking SonarQube Quality Gate..."
-                // Optional: requires SonarQube plugin for Jenkins
-                waitForQualityGate abortPipeline: true
-            }
-        }
-
-        stage('Docker Build & Push') {
+        stage('Docker Build & Run') {
             steps {
                 script {
-                    def imageName = "your-dockerhub-username/simple-ci-cd-app"
-                    sh "docker build -t ${imageName}:latest ."
-                    withDockerRegistry([credentialsId: 'DockerHubCredentials', url: '']) {
-                        sh "docker push ${imageName}:latest"
-                    }
-                }
-            }
-        }
+                    echo "Building Docker image..."
+                    docker.build("${DOCKER_IMAGE}")
 
-        stage('Deploy') {
-            steps {
-                echo "Deploy stage: Implement deployment steps here"
+                    echo "Running Docker container..."
+                    sh "docker stop simple-ci-cd-app || true"
+                    sh "docker rm simple-ci-cd-app || true"
+                    sh "docker run -d --name simple-ci-cd-app -p 8080:8080 ${DOCKER_IMAGE}"
+                }
             }
         }
     }
 
     post {
         success {
-            echo "Pipeline completed successfully!"
+            echo 'Pipeline completed successfully!'
         }
         failure {
-            echo "Pipeline failed. Check the logs!"
+            echo 'Pipeline failed. Check logs!'
         }
     }
 }

@@ -1,0 +1,28 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'org.sonarqube' version '4.3.0.3225'  // SonarQube plugin
+}
+
+group = 'com.example'
+version = '1.0'
+mainClassName = 'com.example.App'  // Change to your main class
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
+
+// SonarQube configuration
+sonarqube {
+    properties {
+        property "sonar.projectKey", "simple-ci-cd-app"
+        property "sonar.projectName", "Simple CI/CD App"
+        property "sonar.host.url", "http://localhost:9000"
+        property "sonar.login", System.getenv("SONAR_TOKEN")  // From Jenkins credentials
+    }
+}
+
