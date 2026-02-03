@@ -36,24 +36,28 @@ stage('Build & Test') {
             }
         }
 
-        stage('SonarQube Analysis') {
+
+stage('SonarQube Analysis') {
             steps {
                 echo 'Running SonarQube scan...'
                 script {
                     def jdkHome = tool 'JDK21'
-                    withEnv(["JAVA_HOME=${jdkHome}"]) {
-                        sh """
-                            gradle sonarqube \
-                                -Dsonar.projectKey=simple-ci-cd-app \
-                                -Dsonar.host.url=${SONAR_HOST_URL} \
-                                -Dsonar.login=${SONAR_TOKEN} \
-                                --no-daemon
-                        """
+                    // This wrapper links the scan to Jenkins so the Quality Gate works
+                    withSonarQubeEnv('SonarQubeScanner') { 
+                        withEnv(["JAVA_HOME=${jdkHome}"]) {
+                            sh """
+                                gradle sonar \
+                                    -Dsonar.projectKey=simple-ci-cd-app \
+                                    -Dsonar.host.url=${SONAR_HOST_URL} \
+                                    -Dsonar.token=${SONAR_TOKEN} \
+                                    --no-daemon
+                            """
+                        }
                     }
                 }
             }
-        }
-        stage('Quality Gate') {
+        }        
+stage('Quality Gate') {
             steps {
                 echo 'Waiting for SonarQube Quality Gate result...'
                 // This requires SonarQube Server to be configured in Manage Jenkins -> System
