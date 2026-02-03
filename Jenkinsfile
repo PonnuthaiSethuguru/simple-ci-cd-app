@@ -23,16 +23,14 @@ pipeline {
             }
         }
 
-        stage('Build & Test') {
+stage('Build & Test') {
             steps {
                 echo 'Building project with Gradle...'
                 script {
-                    // Explicitly catching the tool path to ensure JAVA_HOME is set
                     def jdkHome = tool 'JDK21'
+                    // This 'gradle' command (without the ./) uses the version you set in Jenkins Tools
                     withEnv(["JAVA_HOME=${jdkHome}"]) {
-                        // Ensure gradlew is executable and run build
-                        sh 'chmod +x gradlew'
-                        sh './gradlew clean build --no-daemon'
+                        sh 'gradle clean build --no-daemon' 
                     }
                 }
             }
@@ -45,7 +43,7 @@ pipeline {
                     def jdkHome = tool 'JDK21'
                     withEnv(["JAVA_HOME=${jdkHome}"]) {
                         sh """
-                            ./gradlew sonarqube \
+                            gradle sonarqube \
                                 -Dsonar.projectKey=simple-ci-cd-app \
                                 -Dsonar.host.url=${SONAR_HOST_URL} \
                                 -Dsonar.login=${SONAR_TOKEN} \
@@ -55,7 +53,6 @@ pipeline {
                 }
             }
         }
-
         stage('Quality Gate') {
             steps {
                 echo 'Waiting for SonarQube Quality Gate result...'
