@@ -9,7 +9,7 @@ pipeline {
         DOCKER_HUB_CREDS_ID = 'dockerhub-credentials'
         
         // Update this with your actual DockerHub username
-        DOCKER_REPO = 'YOUR_DOCKERHUB_USERNAME/simple-ci-cd-app'
+        DOCKER_REPO = 'ponnuthaisethuguru/simple-ci-cd-app'
     }
 
     tools {
