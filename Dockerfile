@@ -1,18 +1,15 @@
-# Use official Python image
-FROM python:3.10-slim
+# Use a lightweight Java 21 runtime
+FROM eclipse-temurin:21-jre-alpine
 
-# Set working directory
+# Set the directory inside the container
 WORKDIR /app
 
-# Copy requirements first (for caching)
-COPY requirements.txt .
+# Copy the .jar file from your Gradle build output
+# In a standard Gradle project, the jar is in app/build/libs/
+COPY app/build/libs/*.jar app.jar
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Expose the port your app runs on
+EXPOSE 8080
 
-# Copy all app files
-COPY . .
-
-# Default command
-CMD ["python", "app.py"]
-
+# Run the application
+ENTRYPOINT ["java", "-jar", "app.jar"]
