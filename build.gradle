@@ -1,35 +1,37 @@
+// 1. Plugins block MUST be first and combined into one
 plugins {
     id 'java'
     id 'application'
+    id "org.sonarqube" version "5.1.0.4882"
 }
 
+// 2. Project metadata
 group = 'com.example'
 version = '1.0.0'
 
+// 3. Where to find your libraries
 repositories {
     mavenCentral()
 }
 
+// 4. Project dependencies
 dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
 }
 
+// 5. Java configuration
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21) // matches your JDK
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
-plugins {
-    id "org.sonarqube" version "5.1.0.4882" // Add this line
-    // ... your other plugins like id 'java'
-}
-
+// 6. Application settings
 application {
-    mainClass = 'com.example.App' // Correct way in Gradle 7+
+    mainClass = 'com.example.App'
 }
 
+// 7. Test settings
 test {
     useJUnitPlatform()
 }
-
