@@ -2,47 +2,47 @@ pipeline {
     agent any
 
     environment {
-        DOCKER = "/usr/local/bin/docker"
-        DOCKERHUB_CREDENTIALS = "dockerhub-creds"  // Replace with your Jenkins DockerHub credentials ID
-        IMAGE_NAME = "yourdockerhubusername/simple-ci-cd-app"
-        IMAGE_TAG = "latest"
-        SONARQUBE = "SonarQube"  // Replace with your Jenkins SonarQube server name
+        // Ensure /bin and /usr/bin are included so 'sh' works
+        PATH = "/usr/local/bin:/usr/bin:/bin:$PATH"
+        // Example environment variables for Docker & SonarQube
+        DOCKER_REGISTRY = "your-docker-registry"
+        SONARQUBE_ENV = "SonarQube"
     }
 
     stages {
-        stage('Checkout') {
+
+        stage('Checkout SCM') {
             steps {
                 checkout scm
             }
         }
 
-stages {
         stage('Build & Test') {
             steps {
+                // Use PATH+EXTRA to safely append paths
                 withEnv(["PATH+EXTRA=/usr/local/bin:/usr/bin:/bin"]) {
-                    sh 'echo Building project...'
-                    sh './gradlew build'  // or your actual build command
+                    echo "Building project..."
+                    // Example build command
+                    sh './gradlew clean build'
                 }
             }
         }
-    }
+
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv("${SONARQUBE}") {
-                    sh '''
-                        docker run --rm -v $PWD:/app -w /app sonarsource/sonar-scanner-cli \
-                        -Dsonar.projectKey=simple-ci-cd-app \
-                        -Dsonar.sources=. \
-                        -Dsonar.host.url=$SONAR_HOST_URL \
-                        -Dsonar.login=$SONAR_AUTH_TOKEN
-                    '''
+                withEnv(["PATH+EXTRA=/usr/local/bin:/usr/bin:/bin"]) {
+                    script {
+                        // Wrap SonarQube scanner
+                        def scannerHome = tool name: 'SonarQubeScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                        sh "${scannerHome}/bin/sonar-scanner"
+                    }
                 }
             }
         }
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
+                timeout(time: 1, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -50,23 +50,36 @@ stages {
 
         stage('Docker Build & Push') {
             steps {
-                sh '''
-                    ${DOCKER} build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                    ${DOCKER} login -u $DOCKERHUB_USR -p $DOCKERHUB_PSW
-                    ${DOCKER} push ${IMAGE_NAME}:${IMAGE_TAG}
-                '''
+                withEnv(["PATH+EXTRA=/usr/local/bin:/usr/bin:/bin"]) {
+                    script {
+                        sh "docker build -t ${DOCKER_REGISTRY}/myapp:latest ."
+                        sh "docker push ${DOCKER_REGISTRY}/myapp:latest"
+                    }
+                }
             }
         }
 
         stage('Deploy') {
             steps {
-                // Run container locally
-                sh '''
-                    ${DOCKER} stop simple-ci-cd-app || true
-                    ${DOCKER} rm simple-ci-cd-app || true
-                    ${DOCKER} run -d --name simple-ci-cd-app -p 5000:5000 ${IMAGE_NAME}:${IMAGE_TAG}
-                '''
+                withEnv(["PATH+EXTRA=/usr/local/bin:/usr/bin:/bin"]) {
+                    sh "echo Deploying application..."
+                    // Example deploy command
+                    // sh "./deploy.sh"
+                }
             }
+        }
+
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed.'
+        }
+        aborted {
+            echo 'Pipeline was aborted.'
         }
     }
 }
