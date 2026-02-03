@@ -1,23 +1,23 @@
 pipeline {
     agent any
 
-    environment {
-        SONAR_SERVER_NAME = 'SonarQubeScanner'
-        DOCKER_HUB_CREDS_ID = 'dockerhub-credentials'
-        // REPLACE THIS with your actual DockerHub username
-        DOCKER_REPO = 'YOUR_DOCKERHUB_USERNAME/simple-ci-cd-app'
-    }
-
     tools {
         jdk 'JDK21'
         gradle 'Gradle'
         "hudson.plugins.sonar.SonarRunnerInstallation" 'SonarScanner'
     }
 
+    environment {
+        // Hardcode these strings to avoid any variable expansion issues during startup
+        DOCKER_REPO = 'ponnuthaisethuguru/simple-ci-cd-app'
+    }
+
     stages {
-        stage('Checkout') {
+        stage('Environment Check') {
             steps {
-                checkout scm
+                // This will help us debug if the path is still broken
+                sh 'echo PATH IS: $PATH'
+                sh 'java -version'
             }
         }
 
@@ -30,7 +30,8 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    withSonarQubeEnv("${env.SONAR_SERVER_NAME}") {
+                    // Use the literal name of your server here
+                    withSonarQubeEnv('SonarQubeScanner') {
                         sh "gradle sonar -Dsonar.projectKey=simple-ci-cd-app --no-daemon"
                     }
                 }
@@ -48,17 +49,16 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: "${env.DOCKER_HUB_CREDS_ID}", 
+                    // Make sure 'dockerhub-credentials' exists in Manage Jenkins > Credentials
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', 
                                      passwordVariable: 'DOCKER_PASS', 
                                      usernameVariable: 'DOCKER_USER')]) {
                         
-                        def imageName = "${env.DOCKER_REPO}:${env.BUILD_NUMBER}"
-                        
-                        sh "docker build -t ${imageName} ."
+                        sh "docker build -t ${DOCKER_REPO}:${env.BUILD_NUMBER} ."
                         sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
-                        sh "docker push ${imageName}"
-                        sh "docker tag ${imageName} ${env.DOCKER_REPO}:latest"
-                        sh "docker push ${env.DOCKER_REPO}:latest"
+                        sh "docker push ${DOCKER_REPO}:${env.BUILD_NUMBER}"
+                        sh "docker tag ${DOCKER_REPO}:${env.BUILD_NUMBER} ${DOCKER_REPO}:latest"
+                        sh "docker push ${DOCKER_REPO}:latest"
                     }
                 }
             }
