@@ -8,16 +8,28 @@ pipeline {
     }
 
     environment {
-        // Hardcode these strings to avoid any variable expansion issues during startup
+        // STEP 1: Hard-reset the PATH to remove the "bogus" literal $PATH string
+        PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin"
+        
+        // STEP 2: Set your variables
         DOCKER_REPO = 'ponnuthaisethuguru/simple-ci-cd-app'
+        SONAR_SERVER_NAME = 'SonarQubeScanner'
     }
 
     stages {
-        stage('Environment Check') {
+        stage('Environment Setup') {
             steps {
-                // This will help us debug if the path is still broken
-                sh 'echo PATH IS: $PATH'
+                script {
+                    // Manually inject tool paths into the environment to bypass system corruption
+                    def gradleHome = tool 'Gradle'
+                    def jdkHome = tool 'JDK21'
+                    def sonarHome = tool 'SonarScanner'
+                    
+                    env.PATH = "${gradleHome}/bin:${jdkHome}/bin:${sonarHome}/bin:${env.PATH}"
+                }
+                // Verify tools are now visible
                 sh 'java -version'
+                sh 'gradle -v'
             }
         }
 
@@ -30,8 +42,7 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    // Use the literal name of your server here
-                    withSonarQubeEnv('SonarQubeScanner') {
+                    withSonarQubeEnv("${env.SONAR_SERVER_NAME}") {
                         sh "gradle sonar -Dsonar.projectKey=simple-ci-cd-app --no-daemon"
                     }
                 }
@@ -49,16 +60,18 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
-                    // Make sure 'dockerhub-credentials' exists in Manage Jenkins > Credentials
+                    // This ID must match your Jenkins Credentials ID
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', 
                                      passwordVariable: 'DOCKER_PASS', 
                                      usernameVariable: 'DOCKER_USER')]) {
                         
-                        sh "docker build -t ${DOCKER_REPO}:${env.BUILD_NUMBER} ."
+                        def tag = "${env.DOCKER_REPO}:${env.BUILD_NUMBER}"
+                        
+                        sh "docker build -t ${tag} ."
                         sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
-                        sh "docker push ${DOCKER_REPO}:${env.BUILD_NUMBER}"
-                        sh "docker tag ${DOCKER_REPO}:${env.BUILD_NUMBER} ${DOCKER_REPO}:latest"
-                        sh "docker push ${DOCKER_REPO}:latest"
+                        sh "docker push ${tag}"
+                        sh "docker tag ${tag} ${env.DOCKER_REPO}:latest"
+                        sh "docker push ${env.DOCKER_REPO}:latest"
                     }
                 }
             }
